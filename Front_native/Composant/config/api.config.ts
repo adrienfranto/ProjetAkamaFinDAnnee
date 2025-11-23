@@ -1,7 +1,7 @@
 
 export const API_CONFIG = {
-  BASE_URL: 'http://192.168.137.23:3000/api',
-  SOCKET_URL: 'http://192.168.137.23:3000'
+  BASE_URL: 'http://192.168.137.185:3000/api',
+  SOCKET_URL: 'http://192.168.137.185:3000'
 };
 
 

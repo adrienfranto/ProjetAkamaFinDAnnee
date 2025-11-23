@@ -6,6 +6,7 @@ export interface IUser extends Document {
   password: string;
   email: string;
   avatar?: string;
+  role: "admin" | "client"; // Nouveau champ
   isOnline?: boolean;
   lastSeen?: Date;
   createdAt: Date;
@@ -17,6 +18,12 @@ const UserSchema = new Schema<IUser>(
     password: { type: String, required: true, maxlength: 200 },
     email: { type: String, required: true, unique: true },
     avatar: { type: String, default: "" },
+    role: { 
+      type: String, 
+      enum: ["admin", "client"], 
+      default: "client",
+      required: true 
+    },
     isOnline: { type: Boolean, default: false },
     lastSeen: { type: Date, default: Date.now },
   },

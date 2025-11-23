@@ -5,9 +5,18 @@ import {
   Platform, StatusBar
 } from 'react-native';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import axios from 'axios';
-
-const BACKEND_URL = 'http://192.168.137.23:3000/api/commandes';
+import { 
+  getAllCommandes, 
+  createCommande, 
+  updateCommande, 
+  deleteCommande,
+  onCommandeCreated,
+  onCommandeUpdated,
+  onCommandeDeleted,
+  offCommandeCreated,
+  offCommandeUpdated,
+  offCommandeDeleted
+} from '../../socket/socketEvents';
 
 const PRIMARY_COLOR = '#008080';
 const ACCENT_COLOR = '#008080';
@@ -47,14 +56,13 @@ export default function CommandList({ navigation }) {
     });
   };
 
-  const fetchCommandes = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(BACKEND_URL);
-      
-      // Le backend retourne { success: true, data: [...] }
-      if (response.data.success && response.data.data) {
-        const formattedCommandes = response.data.data.map(item => ({
+  // Charger les commandes via Socket.IO
+  const fetchCommandes = () => {
+    setLoading(true);
+    getAllCommandes((response) => {
+      setLoading(false);
+      if (response.success && response.data) {
+        const formattedCommandes = response.data.map(item => ({
           ...item,
           table_number: String(item.table_number),
           total_amount: String(item.total_amount),
@@ -62,87 +70,131 @@ export default function CommandList({ navigation }) {
         }));
         setCommandes(formattedCommandes);
       } else {
+        Alert.alert("Erreur", response.msg || "Impossible de charger les commandes");
         setCommandes([]);
       }
-    } catch (error) {
-      console.error('Error fetching commandes:', error);
-      Alert.alert("Erreur", `Impossible de récupérer les commandes: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
-  useEffect(() => { fetchCommandes(); }, []);
+  useEffect(() => { 
+    fetchCommandes(); 
+
+    // Écouter les événements en temps réel
+    onCommandeCreated((newCommande) => {
+      console.log("✅ Nouvelle commande ajoutée:", newCommande);
+      const formatted = {
+        ...newCommande,
+        table_number: String(newCommande.table_number),
+        total_amount: String(newCommande.total_amount),
+        items: typeof newCommande.items === 'string' ? newCommande.items : JSON.stringify(newCommande.items),
+      };
+      setCommandes(prev => [formatted, ...prev]);
+    });
+
+    onCommandeUpdated((updatedCommande) => {
+      console.log("✅ Commande mise à jour:", updatedCommande);
+      const formatted = {
+        ...updatedCommande,
+        table_number: String(updatedCommande.table_number),
+        total_amount: String(updatedCommande.total_amount),
+        items: typeof updatedCommande.items === 'string' ? updatedCommande.items : JSON.stringify(updatedCommande.items),
+      };
+      setCommandes(prev => 
+        prev.map(c => c.id === formatted.id ? formatted : c)
+      );
+    });
+
+    onCommandeDeleted((data) => {
+      console.log("✅ Commande supprimée:", data.id);
+      setCommandes(prev => prev.filter(c => c.id !== data.id));
+    });
+
+    // Cleanup
+    return () => {
+      offCommandeCreated();
+      offCommandeUpdated();
+      offCommandeDeleted();
+    };
+  }, []);
 
   const updateField = (field, value) => {
     setCommandeItem({ ...commandeItem, [field]: value });
   };
 
-  const saveCommande = async () => {
+  const saveCommande = () => {
     if (!commandeItem.table_number || !commandeItem.order_name) {
       return Alert.alert("Erreur", "Table et nom obligatoires");
     }
 
-    try {
-      setLoading(true);
+    setLoading(true);
 
-      let parsedItems = [];
-      try { 
-        parsedItems = JSON.parse(commandeItem.items); 
-      } catch {
-        Alert.alert("Erreur JSON", "Items n'est pas un JSON valide.");
-        setLoading(false);
-        return;
-      }
-
-      const dataToSend = {
-        table_number: parseInt(commandeItem.table_number),
-        order_name: commandeItem.order_name,
-        total_amount: parseFloat(commandeItem.total_amount) || 0,
-        payment_method: commandeItem.payment_method || 'Inconnu',
-        status: commandeItem.status || 'En cours',
-        items: parsedItems, // Envoyer comme array
-      };
-
-      if (isEditing) {
-        await axios.put(`${BACKEND_URL}/${commandeItem.id}`, dataToSend);
-        Alert.alert('Succès', 'Commande modifiée');
-      } else {
-        await axios.post(BACKEND_URL, dataToSend);
-        Alert.alert('Succès', 'Commande créée');
-      }
-
-      setModalVisible(false);
-      setCommandeItem({ 
-        id: null, table_number: '', order_name: '', total_amount: '', 
-        payment_method: '', status: '', items: '[]', created_at: '' 
-      });
-      setIsEditing(false);
-      fetchCommandes();
-    } catch (error) {
-      console.error('Error saving commande:', error);
-      Alert.alert("Erreur", `Enregistrement impossible: ${error.response?.data?.msg || error.message}`);
-    } finally {
+    let parsedItems = [];
+    try { 
+      parsedItems = JSON.parse(commandeItem.items); 
+    } catch {
+      Alert.alert("Erreur JSON", "Items n'est pas un JSON valide.");
       setLoading(false);
+      return;
+    }
+
+    const dataToSend = {
+      table_number: parseInt(commandeItem.table_number),
+      order_name: commandeItem.order_name,
+      total_amount: parseFloat(commandeItem.total_amount) || 0,
+      payment_method: commandeItem.payment_method || 'Inconnu',
+      status: commandeItem.status || 'En cours',
+      items: parsedItems,
+    };
+
+    if (isEditing) {
+      dataToSend.id = commandeItem.id;
+      updateCommande(dataToSend, (response) => {
+        setLoading(false);
+        if (response.success) {
+          Alert.alert('Succès', 'Commande modifiée');
+          setModalVisible(false);
+          setCommandeItem({ 
+            id: null, table_number: '', order_name: '', total_amount: '', 
+            payment_method: '', status: '', items: '[]', created_at: '' 
+          });
+          setIsEditing(false);
+        } else {
+          Alert.alert("Erreur", response.msg || "Impossible de modifier la commande");
+        }
+      });
+    } else {
+      createCommande(dataToSend, (response) => {
+        setLoading(false);
+        if (response.success) {
+          Alert.alert('Succès', 'Commande créée');
+          setModalVisible(false);
+          setCommandeItem({ 
+            id: null, table_number: '', order_name: '', total_amount: '', 
+            payment_method: '', status: '', items: '[]', created_at: '' 
+          });
+          setIsEditing(false);
+        } else {
+          Alert.alert("Erreur", response.msg || "Impossible de créer la commande");
+        }
+      });
     }
   };
 
-  const deleteCommande = (id) => {
+  const handleDeleteCommande = (id) => {
     Alert.alert('Confirmation', 'Supprimer cette commande ?', [
       { text: 'Annuler', style: 'cancel' },
       {
         text: 'Supprimer', style: 'destructive',
-        onPress: async () => {
-          try {
-            setLoading(true);
-            await axios.delete(`${BACKEND_URL}/${id}`);
-            Alert.alert('Succès', 'Commande supprimée');
-            fetchCommandes();
-          } catch (error) {
-            Alert.alert("Erreur", `Suppression impossible: ${error.message}`);
-          } finally {
+        onPress: () => {
+          setLoading(true);
+          deleteCommande(id, (response) => {
             setLoading(false);
-          }
+            if (response.success) {
+              Alert.alert('Succès', 'Commande supprimée');
+            } else {
+              Alert.alert("Erreur", response.msg || "Impossible de supprimer");
+            }
+          });
         }
       }
     ]);
@@ -217,7 +269,7 @@ export default function CommandList({ navigation }) {
           <TouchableOpacity onPress={() => editCommande(item)} style={[styles.iconBtn, { backgroundColor: PRIMARY_COLOR + '15' }]}>
             <Ionicons name="create-outline" size={24} color={PRIMARY_COLOR} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => deleteCommande(item.id)} style={[styles.iconBtn, { backgroundColor: DANGER_COLOR + '15' }]}>
+          <TouchableOpacity onPress={() => handleDeleteCommande(item.id)} style={[styles.iconBtn, { backgroundColor: DANGER_COLOR + '15' }]}>
             <Ionicons name="trash-outline" size={24} color={DANGER_COLOR} />
           </TouchableOpacity>
         </View>
@@ -233,7 +285,7 @@ export default function CommandList({ navigation }) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back-outline" size={26} color={CARD_BACKGROUND} />
         </TouchableOpacity>
-        <Text style={styles.topBarText}>Gestion des Commandes</Text>
+        <Text style={styles.topBarText}>Gestion des Commandes (Temps Réel)</Text>
       </View>
 
       {loading && commandes.length === 0 ? (
@@ -244,8 +296,6 @@ export default function CommandList({ navigation }) {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={styles.flatListContent}
-          refreshing={loading}
-          onRefresh={fetchCommandes}
           ListEmptyComponent={() => (
             <View style={styles.emptyList}>
               <Ionicons name="sad-outline" size={50} color={SECONDARY_TEXT_COLOR} />
@@ -344,7 +394,7 @@ export default function CommandList({ navigation }) {
             <View style={styles.inputGroup}>
               <Ionicons name="code-slash-outline" size={22} color={PRIMARY_COLOR} style={styles.inputIcon} />
               <TextInput
-                placeholder='Ex: [{"name": "Pizza", "quantity": 1, "price": 25000}]'
+                placeholder='Ex: [{"id":"1","name":"Pizza","quantity":1,"price":25000}]'
                 value={commandeItem.items}
                 onChangeText={text => updateField('items', text)}
                 style={[styles.input, styles.textArea]}
@@ -369,7 +419,6 @@ export default function CommandList({ navigation }) {
   );
 }
 
-// Styles identiques...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BACKGROUND_COLOR },
   topBar: {
@@ -383,7 +432,7 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 15,
     elevation: 3,
   },
-  topBarText: { color: CARD_BACKGROUND, fontSize: 22, fontWeight: '900' },
+  topBarText: { color: CARD_BACKGROUND, fontSize: 20, fontWeight: '900' },
   backBtn: { position: "absolute", left: 15, bottom: 15, padding: 5 },
   flatListContent: { paddingVertical: 10, paddingBottom: 100 },
   emptyList: {

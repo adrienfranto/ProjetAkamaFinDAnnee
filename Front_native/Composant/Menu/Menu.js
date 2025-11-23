@@ -5,16 +5,15 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
+import { createCommande } from '../../socket/socketEvents';
 
 const { width: screenWidth } = Dimensions.get("window");
 
-// Constantes de style
 const PRIMARY_COLOR = '#008080';
 const ACCENT_COLOR = '#4CAF50';
 const BACKGROUND_COLOR = '#F4F7F9';
 const CARD_COLOR = '#FFFFFF';
 
-// Utilitaires
 const getItemPrice = (item) => item.price || item.prix || 0;
 const getItemName = (item) => item.name || item.nom || 'Article inconnu';
 const getItemCategory = (item) => item.category || item.categorie || 'Autres';
@@ -36,7 +35,6 @@ export default function KiosqueMenu({ route, navigation }) {
 
   const [storedTable, setStoredTable] = useState(null);
 
-  // Charger tableNumber depuis AsyncStorage
   useEffect(() => {
     const loadTable = async () => {
       try {
@@ -52,7 +50,6 @@ export default function KiosqueMenu({ route, navigation }) {
     loadTable();
   }, []);
 
-  // Sauvegarder si la navigation envoie un nouveau numéro
   useEffect(() => {
     const saveTable = async () => {
       try {
@@ -71,10 +68,9 @@ export default function KiosqueMenu({ route, navigation }) {
 
   const finalTable = storedTable;
 
-  // Charger le menu depuis backend
   const loadMenu = async () => {
     try {
-      const res = await fetch("http://192.168.137.23:3000/api/menu");
+      const res = await fetch("http://192.168.137.185:3000/api/menu");
       const data = await res.json();
       const loadedMenu = data.menu || [];
       setMenu(loadedMenu);
@@ -95,7 +91,6 @@ export default function KiosqueMenu({ route, navigation }) {
 
   useEffect(() => { loadMenu(); }, []);
 
-  // Ajouter au panier
   const addToCart = (item) => {
     setCart(prevCart => {
       const existing = prevCart.find(c => c.item.id === item.id);
@@ -131,17 +126,16 @@ export default function KiosqueMenu({ route, navigation }) {
 
   const totalPrice = cart.reduce((sum, c) => sum + getItemPrice(c.item) * c.qty, 0);
 
-  // ✅ CORRECTION: Format correct pour le backend
   const buildItemsArray = (cartItems) => {
     return cartItems.map(c => ({
       id: c.item.id?.toString() || `item-${Date.now()}`,
       name: getItemName(c.item),
-      quantity: c.qty,  // ✅ 'quantity' au lieu de 'qty'
+      quantity: c.qty,
       price: getItemPrice(c.item)
     }));
   };
 
-  // Paiement et POST commande
+  // Paiement via Socket.IO
   const handlePayment = async (method) => {
     if (cart.length === 0) {
       return Alert.alert("Panier vide !", "Veuillez ajouter des articles avant de payer.");
@@ -152,7 +146,6 @@ export default function KiosqueMenu({ route, navigation }) {
     const localTxnId = "TXN" + Math.floor(Math.random() * 1000000);
     const totalAmount = totalPrice;
     
-    // Reçu optimiste
     const optimisticReceipt = { 
       id: localTxnId, 
       date: new Date().toLocaleString(), 
@@ -162,85 +155,48 @@ export default function KiosqueMenu({ route, navigation }) {
     };
     setReceipt(optimisticReceipt);
 
-    // ✅ CORRECTION: Construire l'array d'items au bon format
     const itemsArray = buildItemsArray(cart);
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const dataToSend = {
+      table_number: parseInt(finalTable) || 0,
+      order_name: `CMD-${localTxnId}`,
+      total_amount: totalAmount,
+      payment_method: method,
+      status: 'Payée',
+      items: itemsArray
+    };
 
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log("📤 Envoi commande via Socket:", JSON.stringify(dataToSend, null, 2));
 
-      // ✅ CORRECTION: Envoyer items comme array, pas comme string JSON
-      const body = {
-        table_number: parseInt(finalTable) || 0,
-        order_name: `CMD-${localTxnId}`,
-        total_amount: totalAmount.toFixed(2),
-        payment_method: method,
-        status: 'Payée',
-        items: itemsArray  // ✅ Array d'objets directement
-      };
-
-      console.log("📤 Envoi commande:", JSON.stringify(body, null, 2));
-
-      const response = await fetch('http://192.168.137.23:3000/api/commandes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify(body),
-      });
-
-      clearTimeout(timeout);
-
-      const text = await response.text();
-      let result;
-      try {
-        result = text ? JSON.parse(text) : {};
-      } catch (e) { 
-        result = { message: text }; 
-      }
-
-      if (!response.ok) {
-        console.error('❌ Erreur backend:', response.status, result);
-        const serverMsg = result?.msg || result?.error || result?.message || `Erreur serveur (${response.status})`;
-        Alert.alert("Erreur commande", serverMsg);
-        setNotifications(prev => [{ 
-          id: Date.now(), 
-          message: `Erreur commande: ${serverMsg}`, 
-          date: new Date().toLocaleString() 
-        }, ...prev]);
-      } else {
-        console.log('✅ Réponse backend:', result);
-        const backendId = result.commande_id || result.data?.id || result.id || null;
-        setReceipt({ ...optimisticReceipt, id: backendId || optimisticReceipt.id });
+    // Utiliser Socket.IO au lieu de fetch
+    createCommande(dataToSend, (response) => {
+      setProcessingPayment(false);
+      
+      if (response.success) {
+        console.log('✅ Réponse Socket:', response);
+        const backendId = response.data?.id || localTxnId;
+        setReceipt({ ...optimisticReceipt, id: backendId });
 
         setNotifications(prev => [{ 
           id: Date.now(), 
-          message: `Commande enregistrée (ID: ${backendId || 'local'})`, 
+          message: `Commande enregistrée (ID: ${backendId})`, 
           date: new Date().toLocaleString() 
         }, ...prev]);
 
         Alert.alert("Succès", `Commande envoyée pour ${totalAmount.toFixed(2)} Ar !`);
         setCart([]);
-      }
-    } catch (err) {
-      console.error('❌ Erreur catch:', err);
-      if (err.name === 'AbortError') {
-        Alert.alert("Erreur réseau", "La requête a expiré.");
       } else {
-        Alert.alert("Erreur", "Une erreur est survenue lors de l'envoi de la commande.");
+        console.error('❌ Erreur Socket:', response.msg);
+        Alert.alert("Erreur commande", response.msg || "Impossible d'enregistrer la commande");
+        setNotifications(prev => [{ 
+          id: Date.now(), 
+          message: `Erreur: ${response.msg}`, 
+          date: new Date().toLocaleString() 
+        }, ...prev]);
       }
-      setNotifications(prev => [{ 
-        id: Date.now(), 
-        message: "Échec envoi commande", 
-        date: new Date().toLocaleString() 
-      }, ...prev]);
-    } finally {
-      setProcessingPayment(false);
-    }
+    });
   };
 
-  // Partager reçu
   const shareReceipt = async () => {
     if (!receipt) return;
     const text =
@@ -260,7 +216,6 @@ export default function KiosqueMenu({ route, navigation }) {
     selectedCategory === 'Tout' || getItemCategory(item) === selectedCategory
   );
 
-  // Carrousel auto-scroll
   useEffect(() => {
     if (filteredMenu.length <= 1) return;
     const interval = setInterval(() => {
@@ -273,7 +228,6 @@ export default function KiosqueMenu({ route, navigation }) {
     return () => clearInterval(interval);
   }, [filteredMenu, selectedCategory]);
 
-  // Modals
   const RenderNotificationModal = () => (
     <Modal visible={showNotif} transparent animationType="slide" onRequestClose={() => setShowNotif(false)}>
       <View style={styles.modalContainer}>
@@ -385,12 +339,10 @@ export default function KiosqueMenu({ route, navigation }) {
     </Modal>
   );
 
-  // Rendu principal
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY_COLOR} />
       
-      {/* HEADER */}
       <View style={styles.header}>
         <Text style={styles.headerText} numberOfLines={1}>Menu du jour</Text>
         <View style={styles.topRight}>
@@ -417,7 +369,6 @@ export default function KiosqueMenu({ route, navigation }) {
       </View>
       
       <View style={{ flex: 1 }}>
-        {/* CATEGORIES */}
         <View style={styles.categoryContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}>
             {categories.map((cat) => (
@@ -438,7 +389,6 @@ export default function KiosqueMenu({ route, navigation }) {
           </ScrollView>
         </View>
 
-        {/* CARROUSEL */}
         {loading ? (
           <ActivityIndicator size="large" color={PRIMARY_COLOR} style={{ marginTop: 50 }} />
         ) : (
@@ -487,7 +437,6 @@ export default function KiosqueMenu({ route, navigation }) {
       <RenderNotificationModal />
       <RenderCartModal />
 
-      {/* BARRE BAS FIXE */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.bottomBtn} onPress={() => navigation.navigate("accueil")}>
           <FontAwesome name="home" size={24} color={PRIMARY_COLOR} />
@@ -510,7 +459,6 @@ export default function KiosqueMenu({ route, navigation }) {
   );
 }
 
-// STYLES (identiques à l'original)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BACKGROUND_COLOR },
   header: { 

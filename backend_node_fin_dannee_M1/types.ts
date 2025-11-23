@@ -7,6 +7,7 @@ export interface UserProps extends Document {
   password: string;
   name: string;
   avatar?: string;
+  role: "admin" | "client"; // Nouveau champ
   isOnline?: boolean;
   lastSeen?: Date;
   createdAt: Date;

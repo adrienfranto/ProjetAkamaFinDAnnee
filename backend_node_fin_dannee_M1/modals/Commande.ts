@@ -43,7 +43,6 @@ const CommandeSchema = new Schema<CommandeProps>(
       type: String,
       required: true,
       default: "En cours",
-      // ✅ CORRECTION: Ajout de "Payée" dans l'enum
       enum: ["En cours", "Terminée", "Annulée", "En préparation", "Livrée", "Payée"],
     },
     items: [

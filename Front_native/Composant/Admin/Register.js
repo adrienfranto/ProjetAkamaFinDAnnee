@@ -17,7 +17,8 @@ export default function Register({ navigation }) {
     email: '',
     password: '',
     confirmPassword: '',
-    avatar: ''
+    avatar: '',
+    role: 'client' // Valeur par défaut
   });
   const [loading, setLoading] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
@@ -61,6 +62,7 @@ export default function Register({ navigation }) {
           email: formData.email,
           password: formData.password,
           avatar: formData.avatar || '',
+          role: formData.role, // Envoyer le rôle sélectionné
         }),
       });
 
@@ -69,7 +71,7 @@ export default function Register({ navigation }) {
       if (response.ok && data.success) {
         Alert.alert(
           "Succès", 
-          `Compte créé avec succès ! Vous pouvez maintenant vous connecter.`,
+          `Compte créé avec succès en tant que ${formData.role === 'admin' ? 'Administrateur' : 'Client'} ! Vous pouvez maintenant vous connecter.`,
           [
             {
               text: "OK",
@@ -142,6 +144,54 @@ export default function Register({ navigation }) {
             placeholderTextColor="#888"
             editable={!loading}
           />
+        </View>
+
+        {/* Sélection du rôle */}
+        <View style={styles.roleContainer}>
+          <Text style={styles.roleLabel}>Type de compte *</Text>
+          <View style={styles.roleButtons}>
+            <TouchableOpacity 
+              style={[
+                styles.roleButton, 
+                formData.role === 'client' && styles.roleButtonActive
+              ]}
+              onPress={() => updateField('role', 'client')}
+              disabled={loading}
+            >
+              <Ionicons 
+                name="person" 
+                size={24} 
+                color={formData.role === 'client' ? '#FFF' : PRIMARY_COLOR} 
+              />
+              <Text style={[
+                styles.roleButtonText,
+                formData.role === 'client' && styles.roleButtonTextActive
+              ]}>
+                Client
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[
+                styles.roleButton, 
+                formData.role === 'admin' && styles.roleButtonActive
+              ]}
+              onPress={() => updateField('role', 'admin')}
+              disabled={loading}
+            >
+              <Ionicons 
+                name="shield-checkmark" 
+                size={24} 
+                color={formData.role === 'admin' ? '#FFF' : PRIMARY_COLOR} 
+              />
+              <Text style={[
+                styles.roleButtonText,
+                formData.role === 'admin' && styles.roleButtonTextActive
+              ]}>
+                Administrateur
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Mot de passe */}
@@ -273,6 +323,46 @@ const styles = StyleSheet.create({
   },
   passwordToggle: {
     paddingLeft: 10,
+  },
+  roleContainer: {
+    width: '100%',
+    marginBottom: 15,
+  },
+  roleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: TEXT_COLOR,
+    marginBottom: 10,
+  },
+  roleButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  roleButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
+    backgroundColor: '#FFFFFF',
+    gap: 8,
+  },
+  roleButtonActive: {
+    backgroundColor: PRIMARY_COLOR,
+    borderColor: PRIMARY_COLOR,
+  },
+  roleButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: PRIMARY_COLOR,
+  },
+  roleButtonTextActive: {
+    color: '#FFFFFF',
   },
   registerBtn: {
     width: '100%',

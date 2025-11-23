@@ -7,11 +7,7 @@ import {
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-
-// ⚠️ IMPORTANT: Configurez votre URL backend ici
-// Pour émulateur/simulateur: http://192.168.137.23:3000/api
-// Pour appareil physique: http://VOTRE_IP_LOCALE:3000/api (ex: http://192.168.1.5:3000/api)
-const BACKEND_URL = 'http://192.168.137.23:3000/api/menu';
+const BACKEND_URL = 'http://192.168.137.185:3000/api/menu';
 
 const PRIMARY_COLOR = '#008080';
 const ACCENT_COLOR = '#008080';

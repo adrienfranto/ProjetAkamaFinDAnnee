@@ -4,13 +4,22 @@ import bcrypt from "bcryptjs";
 import { generatedToken } from "../utils/token";
 
 export const registerUser = async (req: Request, res: Response): Promise<void> => {
-  const { email, password, name, avatar } = req.body;
+  const { email, password, name, avatar, role } = req.body;
   try {
     // Validation des champs requis
     if (!email || !password || !name) {
       res.status(400).json({ 
         success: false, 
         msg: "Email, password et name sont requis" 
+      });
+      return;
+    }
+
+    // Validation du rôle
+    if (role && !["admin", "client"].includes(role)) {
+      res.status(400).json({ 
+        success: false, 
+        msg: "Le rôle doit être 'admin' ou 'client'" 
       });
       return;
     }
@@ -28,6 +37,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
       password,
       name,
       avatar: avatar || "",
+      role: role || "client", // Par défaut "client"
       isOnline: false,
       lastSeen: new Date(),
     });
@@ -50,6 +60,7 @@ export const registerUser = async (req: Request, res: Response): Promise<void> =
         name: user.name,
         email: user.email,
         avatar: user.avatar,
+        role: user.role, // Inclure le rôle dans la réponse
       },
     });
   } catch (error) {
@@ -95,6 +106,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         name: user.name,
         email: user.email,
         avatar: user.avatar,
+        role: user.role, // Inclure le rôle dans la réponse
       },
     });
   } catch (error) {

@@ -1,7 +1,9 @@
+// src/socket/socket.ts
 import dotenv from "dotenv";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
 import { registerUserEvents } from "./userEvents";
+import { registerCommandeEvents } from "./commandeEvent";
 import User from "../modals/User";
 
 dotenv.config();
@@ -58,10 +60,9 @@ export function initializeSocket(server: any): SocketIOServer {
             console.log("❌ Error updating online status:", error);
         }
 
-        // Register events
+        // Register all events
         registerUserEvents(io, socket);
-
-       
+        registerCommandeEvents(io, socket);
 
         socket.on("disconnect", async () => {
             console.log(`❌ User disconnected ${userId}, username: ${socket.data.name}`);

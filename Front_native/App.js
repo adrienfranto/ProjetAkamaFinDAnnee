@@ -10,7 +10,7 @@ import Hisorique from './Composant/Menu/Historique';
 import AdminLogin from './Composant/Admin/AdminLogin';
 import Register from './Composant/Admin/Register';
 import CommandList from './Composant/Command/ListeCommande';
-
+import StartProjet from './Composant/StartProjet';
 // variable constante pour la navigation
 const Stack = createNativeStackNavigator();
 
@@ -18,11 +18,12 @@ export default function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator 
-        initialRouteName='accueil'
+        initialRouteName='start'
         screenOptions={{
           headerShown: false
         }}
       >
+        <Stack.Screen name='start' component={StartProjet}/>
         <Stack.Screen name="accueil" component={Acceuil} />
         <Stack.Screen name="affectMin" component={AffectationMin} />
         <Stack.Screen name="ajoutMenu" component={AjoutDonne} />

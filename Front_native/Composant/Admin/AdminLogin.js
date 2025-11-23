@@ -46,6 +46,7 @@ export default function AdminLogin({ navigation }) {
         await AsyncStorage.setItem('userData', JSON.stringify(data.user));
 
         console.log("✅ Login successful, token saved");
+        console.log("👤 User role:", data.user.role);
 
         // Connexion socket
         try {
@@ -103,9 +104,15 @@ export default function AdminLogin({ navigation }) {
 
         Alert.alert("Succès", `Bienvenue ${data.user.name} !`);
         
-        // Attendre un peu pour voir les logs avant de naviguer
+        // Navigation selon le rôle
         setTimeout(() => {
-          navigation.navigate('ajoutMenu');
+          if (data.user.role === 'admin') {
+            console.log("🔐 Redirection vers ajoutMenu (Admin)");
+            navigation.navigate('ajoutMenu');
+          } else {
+            console.log("👤 Redirection vers accueil (Client)");
+            navigation.navigate('accueil');
+          }
         }, 500);
 
       } else {
@@ -126,7 +133,7 @@ export default function AdminLogin({ navigation }) {
       console.log("🧹 Cleaning up AdminLogin component...");
       offTestSocket();
       
-      // Ne pas déconnecter le socket ici car on navigue vers ajoutMenu
+      // Ne pas déconnecter le socket ici car on navigue vers ajoutMenu ou accueil
       // La déconnexion se fera lors du logout
     };
   }, []);
