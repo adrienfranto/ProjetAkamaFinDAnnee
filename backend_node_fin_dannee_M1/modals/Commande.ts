@@ -1,3 +1,4 @@
+// src/modals/Commande.ts
 import { Schema, model, Document, Types } from "mongoose";
 
 export interface CommandeProps extends Document {
@@ -13,6 +14,7 @@ export interface CommandeProps extends Document {
     quantity: number;
     price: number;
   }>;
+  isRead: boolean; // ✅ NOUVEAU: Indicateur de lecture
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +55,12 @@ const CommandeSchema = new Schema<CommandeProps>(
         price: { type: Number, required: true },
       },
     ],
+    // ✅ NOUVEAU: Champ isRead
+    isRead: {
+      type: Boolean,
+      default: false,
+      required: true,
+    },
   },
   {
     timestamps: true,

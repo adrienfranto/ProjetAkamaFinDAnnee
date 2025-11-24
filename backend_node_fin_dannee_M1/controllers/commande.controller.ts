@@ -2,6 +2,9 @@
 import { Request, Response } from "express";
 import Commande from "../modals/Commande";
 
+// ⚠️ Note: Ces controllers HTTP sont disponibles pour compatibilité
+// Mais l'application utilise Socket.IO pour les opérations en temps réel (voir commandeEvents.ts)
+
 // AFFICHER TOUTES LES COMMANDES
 export const getAllCommandes = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -15,6 +18,7 @@ export const getAllCommandes = async (req: Request, res: Response): Promise<void
       payment_method: c.paymentMethod,
       status: c.status,
       items: c.items,
+      isRead: c.isRead,
       created_at: c.createdAt.toISOString(),
       updated_at: c.updatedAt.toISOString(),
     }));
@@ -47,6 +51,7 @@ export const getCommandeById = async (req: Request, res: Response): Promise<void
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
+        isRead: commande.isRead,
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       },
@@ -70,7 +75,7 @@ export const createCommande = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // ✅ CORRECTION: Gérer items comme array directement (pas de parsing JSON)
+    // ✅ Gérer items comme array directement (pas de parsing JSON)
     let parsedItems = items;
 
     // Si le frontend envoie quand même une string JSON (fallback)
@@ -109,6 +114,7 @@ export const createCommande = async (req: Request, res: Response): Promise<void>
       paymentMethod: payment_method || "Inconnu",
       status: status || "En cours",
       items: parsedItems,
+      isRead: false, // Par défaut non lue
     });
 
     await commande.save();
@@ -127,6 +133,7 @@ export const createCommande = async (req: Request, res: Response): Promise<void>
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
+        isRead: commande.isRead,
         created_at: commande.createdAt.toISOString(),
       },
     });
@@ -156,7 +163,7 @@ export const createCommande = async (req: Request, res: Response): Promise<void>
 export const updateCommande = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { table_number, order_name, total_amount, payment_method, status, items } = req.body;
+    const { table_number, order_name, total_amount, payment_method, status, items, isRead } = req.body;
 
     const commande = await Commande.findById(id);
 
@@ -165,7 +172,7 @@ export const updateCommande = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // ✅ CORRECTION: Gérer items comme array
+    // ✅ Gérer items comme array
     let parsedItems = items;
     if (typeof items === 'string') {
       try {
@@ -182,7 +189,7 @@ export const updateCommande = async (req: Request, res: Response): Promise<void>
     if (total_amount !== undefined) commande.totalAmount = total_amount.toString();
     if (payment_method !== undefined) commande.paymentMethod = payment_method;
     if (status !== undefined) commande.status = status;
-    if (parsedItems !== undefined) commande.items = parsedItems;
+    if (isRead !== undefined) commande.isRead = isRead;
 
     await commande.save();
 
@@ -197,6 +204,7 @@ export const updateCommande = async (req: Request, res: Response): Promise<void>
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
+        isRead: commande.isRead,
         updated_at: commande.updatedAt.toISOString(),
       },
     });

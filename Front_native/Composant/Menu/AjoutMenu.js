@@ -7,7 +7,13 @@ import {
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-const BACKEND_URL = 'http://192.168.137.185:3000/api/menu';
+import { 
+  getUnreadCommandesCount, 
+  onUnreadCommandesCount, 
+  offUnreadCommandesCount 
+} from '../../socket/socketEvents';
+
+const BACKEND_URL = 'http://192.168.137.214:3000/api/menu';
 
 const PRIMARY_COLOR = '#008080';
 const ACCENT_COLOR = '#008080';
@@ -22,13 +28,15 @@ export default function MenuList({ navigation }) {
   });
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  
+  // ✅ État pour le compteur de notifications
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchMenu = async () => {
     try {
       setLoading(true);
       const response = await axios.get(BACKEND_URL);
       
-      // Le backend retourne { success: true, menu: [...] }
       if (response.data.success && response.data.menu) {
         const formattedMenu = response.data.menu.map(item => ({
           ...item,
@@ -46,7 +54,48 @@ export default function MenuList({ navigation }) {
     }
   };
 
-  useEffect(() => { fetchMenu(); }, []);
+  // ✅ Charger le compteur de notifications initial
+  const fetchUnreadCount = () => {
+    console.log("📊 Fetching initial unread count...");
+    getUnreadCommandesCount((response) => {
+      if (response.success) {
+        console.log(`📊 Compteur initial: ${response.count}`);
+        setUnreadCount(response.count);
+      } else {
+        console.log("❌ Erreur lors du chargement du compteur");
+        setUnreadCount(0);
+      }
+    });
+  };
+
+  useEffect(() => { 
+    console.log("🔄 MenuList mounted");
+    fetchMenu();
+    fetchUnreadCount();
+
+    // ✅ Écouter les mises à jour du compteur en temps réel
+    console.log("👂 Starting to listen to unreadCommandesCount...");
+    onUnreadCommandesCount((count) => {
+      console.log(`📥 Compteur mis à jour en temps réel: ${count}`);
+      setUnreadCount(count);
+    });
+
+    // Cleanup
+    return () => {
+      console.log("🧹 MenuList unmounted, cleaning up...");
+      offUnreadCommandesCount();
+    };
+  }, []);
+
+  // ✅ Recharger le compteur quand on revient sur cette page
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log("🔄 MenuList focused, refreshing unread count...");
+      fetchUnreadCount();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const updateField = (field, value) => {
     setMenuItem({ ...menuItem, [field]: value });
@@ -168,9 +217,27 @@ export default function MenuList({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY_COLOR} />
       
       <View style={styles.topBar}>
-        <TouchableOpacity style={styles.orderBtn} onPress={() => navigation.navigate("listecommande")}>
-          <Ionicons name="receipt-outline" size={26} color={CARD_BACKGROUND} />
-        </TouchableOpacity>
+        {/* ✅ Badge de notification avec position relative */}
+        <View style={styles.orderBtnContainer}>
+          <TouchableOpacity 
+            style={styles.orderBtn} 
+            onPress={() => {
+              console.log(`🔔 Navigating to listecommande, current unread: ${unreadCount}`);
+              navigation.navigate("listecommande");
+            }}
+          >
+            <Ionicons name="receipt-outline" size={26} color={CARD_BACKGROUND} />
+          </TouchableOpacity>
+          
+          {unreadCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount }
+              </Text>
+            </View>
+          )}
+        </View>
+        
         <Text style={styles.topBarText}>Gestion des Plats</Text>
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={28} color={CARD_BACKGROUND} />
@@ -284,7 +351,6 @@ export default function MenuList({ navigation }) {
   );
 }
 
-// Styles identiques à l'original...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: BACKGROUND_COLOR },
   topBar: {
@@ -300,7 +366,40 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   topBarText: { color: CARD_BACKGROUND, fontSize: 22, fontWeight: "bold" },
-  orderBtn: { position: "absolute", left: 15, bottom: 10, padding: 8 },
+  // ✅ Container pour le bouton avec badge
+  orderBtnContainer: { 
+    position: "absolute", 
+    left: 15, 
+    bottom: 10,
+  },
+  orderBtn: { 
+    padding: 8,
+  },
+  // ✅ Badge positionné par rapport au container
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -10,
+    backgroundColor: '#FF3B30',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  badgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
   logoutBtn: { position: "absolute", right: 15, bottom: 10, padding: 8 },
   flatListContent: { paddingVertical: 10, paddingBottom: 100 },
   menuCard: {

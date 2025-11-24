@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 import { registerUserEvents } from "./userEvents";
 import { registerCommandeEvents } from "./commandeEvent";
 import User from "../modals/User";
+import Commande from "../modals/Commande";
 
 dotenv.config();
 
@@ -56,6 +57,12 @@ export function initializeSocket(server: any): SocketIOServer {
                 isOnline: true,
                 lastSeen: new Date()
             });
+
+            // ✅ NOUVEAU: Envoyer le compteur de commandes non lues dès la connexion
+            const unreadCount = await Commande.countDocuments({ isRead: false });
+            socket.emit("unreadCommandesCount", { count: unreadCount });
+            console.log(`📊 Compteur initial envoyé: ${unreadCount} commandes non lues`);
+
         } catch (error) {
             console.log("❌ Error updating online status:", error);
         }

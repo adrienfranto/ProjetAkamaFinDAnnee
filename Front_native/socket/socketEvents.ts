@@ -125,7 +125,7 @@ export const getAllCommandes = (callback) => {
   
   if (!socket || !socket.connected) {
     console.log("❌ Socket is not connected");
-    if (callback) callback({ success: false, msg: "Socket non connecté" });
+    if (callback) callback({ success: false, msg: "Socket non connecté", data: [] });
     return;
   }
 
@@ -145,6 +145,34 @@ export const getCommandeById = (id, callback) => {
 
   console.log("📤 Getting commande by id:", id);
   socket.emit("getCommandeById", { id }, callback);
+};
+
+// ✅ Récupérer le nombre de commandes non lues
+export const getUnreadCommandesCount = (callback) => {
+  const socket = getSocket();
+  
+  if (!socket || !socket.connected) {
+    console.log("❌ Socket is not connected");
+    if (callback) callback({ success: false, count: 0 });
+    return;
+  }
+
+  console.log("📤 Getting unread commandes count");
+  socket.emit("getUnreadCommandesCount", callback);
+};
+
+// ✅ Marquer toutes les commandes comme lues
+export const markAllCommandesAsRead = (callback) => {
+  const socket = getSocket();
+  
+  if (!socket || !socket.connected) {
+    console.log("❌ Socket is not connected");
+    if (callback) callback({ success: false, msg: "Socket non connecté" });
+    return;
+  }
+
+  console.log("📤 Marking all commandes as read");
+  socket.emit("markAllCommandesAsRead", callback);
 };
 
 // ============== Listeners pour les événements temps réel ==============
@@ -215,5 +243,28 @@ export const offCommandeDeleted = () => {
   if (socket) {
     socket.off("commandeDeleted");
     console.log("🔇 Stopped listening to commandeDeleted");
+  }
+};
+
+// ✅ Écouter les changements du compteur de commandes non lues
+export const onUnreadCommandesCount = (callback) => {
+  const socket = getSocket();
+  
+  if (!socket || !socket.connected) {
+    console.log("❌ Socket is not connected");
+    return;
+  }
+
+  socket.on("unreadCommandesCount", (data) => {
+    console.log("📥 Compteur de commandes non lues:", data.count);
+    callback(data.count);
+  });
+};
+
+export const offUnreadCommandesCount = () => {
+  const socket = getSocket();
+  if (socket) {
+    socket.off("unreadCommandesCount");
+    console.log("🔇 Stopped listening to unreadCommandesCount");
   }
 };

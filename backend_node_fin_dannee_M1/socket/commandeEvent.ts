@@ -18,7 +18,7 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         });
       }
 
-      // Créer la commande
+      // Créer la commande avec isRead = false par défaut
       const commande = new Commande({
         tableNumber: parseInt(table_number.toString()),
         orderNumber: order_name || `CMD-${Date.now()}`,
@@ -26,6 +26,7 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         paymentMethod: payment_method || "Inconnu",
         status: status || "En cours",
         items: items,
+        isRead: false, // ✅ NOUVEAU: Par défaut non lue
       });
 
       await commande.save();
@@ -38,12 +39,17 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
+        isRead: commande.isRead, // ✅ NOUVEAU
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       };
 
       // Émettre à tous les clients connectés
       io.emit("commandeCreated", commandeData);
+
+      // ✅ MODIFIÉ: Compter seulement les commandes non lues
+      const unreadCount = await Commande.countDocuments({ isRead: false });
+      io.emit("unreadCommandesCount", { count: unreadCount });
 
       console.log(`✅ Commande créée: ${commande._id}`);
 
@@ -98,12 +104,17 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
+        isRead: commande.isRead, // ✅ NOUVEAU
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       };
 
       // Émettre à tous les clients
       io.emit("commandeUpdated", commandeData);
+
+      // ✅ MODIFIÉ: Mettre à jour le compteur
+      const unreadCount = await Commande.countDocuments({ isRead: false });
+      io.emit("unreadCommandesCount", { count: unreadCount });
 
       console.log(`✅ Commande mise à jour: ${commande._id}`);
 
@@ -142,6 +153,10 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
       // Émettre à tous les clients
       io.emit("commandeDeleted", { id: id });
 
+      // ✅ MODIFIÉ: Mettre à jour le compteur
+      const unreadCount = await Commande.countDocuments({ isRead: false });
+      io.emit("unreadCommandesCount", { count: unreadCount });
+
       console.log(`✅ Commande supprimée: ${id}`);
 
       if (callback) {
@@ -174,6 +189,7 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: c.paymentMethod,
         status: c.status,
         items: c.items,
+        isRead: c.isRead, // ✅ NOUVEAU
         created_at: c.createdAt.toISOString(),
         updated_at: c.updatedAt.toISOString(),
       }));
@@ -216,6 +232,7 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
+        isRead: commande.isRead, // ✅ NOUVEAU
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       };
@@ -228,6 +245,60 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
       }
     } catch (error: any) {
       console.error("❌ Error fetching commande:", error);
+      if (callback) {
+        callback({
+          success: false,
+          msg: error.message || "Erreur serveur"
+        });
+      }
+    }
+  });
+
+  // ✅ NOUVEAU: Événement pour obtenir le nombre de commandes non lues
+  socket.on("getUnreadCommandesCount", async (callback) => {
+    try {
+      const count = await Commande.countDocuments({ isRead: false });
+      
+      if (callback) {
+        callback({
+          success: true,
+          count: count
+        });
+      }
+    } catch (error: any) {
+      console.error("❌ Error getting unread count:", error);
+      if (callback) {
+        callback({
+          success: false,
+          msg: error.message || "Erreur serveur",
+          count: 0
+        });
+      }
+    }
+  });
+
+  // ✅ NOUVEAU: Marquer toutes les commandes comme lues
+  socket.on("markAllCommandesAsRead", async (callback) => {
+    try {
+      const result = await Commande.updateMany(
+        { isRead: false },
+        { $set: { isRead: true } }
+      );
+
+      console.log(`✅ ${result.modifiedCount} commandes marquées comme lues`);
+
+      // Émettre la mise à jour du compteur à tous les clients
+      io.emit("unreadCommandesCount", { count: 0 });
+
+      if (callback) {
+        callback({
+          success: true,
+          msg: `${result.modifiedCount} commandes marquées comme lues`,
+          modifiedCount: result.modifiedCount
+        });
+      }
+    } catch (error: any) {
+      console.error("❌ Error marking commandes as read:", error);
       if (callback) {
         callback({
           success: false,

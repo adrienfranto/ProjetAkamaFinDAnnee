@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Modal, TextInput, Alert, ScrollView, ActivityIndicator,
@@ -10,12 +10,15 @@ import {
   createCommande, 
   updateCommande, 
   deleteCommande,
+  markAllCommandesAsRead,
   onCommandeCreated,
   onCommandeUpdated,
   onCommandeDeleted,
+  onUnreadCommandesCount,
   offCommandeCreated,
   offCommandeUpdated,
-  offCommandeDeleted
+  offCommandeDeleted,
+  offUnreadCommandesCount
 } from '../../socket/socketEvents';
 
 const PRIMARY_COLOR = '#008080';
@@ -40,9 +43,11 @@ export default function CommandList({ navigation }) {
     payment_method: '',
     status: '',
     items: '[]',
-    created_at: ''
+    created_at: '',
+    isRead: false
   });
   const [isEditing, setIsEditing] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const formatDate = (dateString) => {
     if (!dateString) return "Non défini";
@@ -58,6 +63,7 @@ export default function CommandList({ navigation }) {
 
   // Charger les commandes via Socket.IO
   const fetchCommandes = () => {
+    console.log("📥 Fetching commandes...");
     setLoading(true);
     getAllCommandes((response) => {
       setLoading(false);
@@ -67,37 +73,73 @@ export default function CommandList({ navigation }) {
           table_number: String(item.table_number),
           total_amount: String(item.total_amount),
           items: typeof item.items === 'string' ? item.items : JSON.stringify(item.items),
+          isRead: item.isRead || false
         }));
         setCommandes(formattedCommandes);
+        
+        // Compter les non lues localement
+        const unread = formattedCommandes.filter(c => !c.isRead).length;
+        setUnreadCount(unread);
+        console.log(`📊 Commandes chargées: ${formattedCommandes.length}, Non lues: ${unread}`);
+        
+        // ✅ MARQUAGE AUTOMATIQUE : Si on a des commandes non lues, les marquer immédiatement
+        if (unread > 0) {
+          console.log(`🔔 Marquage automatique de ${unread} commande(s)...`);
+          setTimeout(() => {
+            markAllCommandesAsRead((markResponse) => {
+              if (markResponse.success) {
+                console.log(`✅ ${markResponse.msg}`);
+              } else {
+                console.error("❌ Erreur marquage:", markResponse.msg);
+              }
+            });
+          }, 500); // Petit délai pour que l'utilisateur voie la page
+        }
       } else {
         Alert.alert("Erreur", response.msg || "Impossible de charger les commandes");
         setCommandes([]);
+        setUnreadCount(0);
       }
     });
   };
 
   useEffect(() => { 
-    fetchCommandes(); 
+    console.log("🔄 CommandList mounted");
+    fetchCommandes();
+
+    // ✅ Écouter les mises à jour du compteur en temps réel
+    console.log("👂 Listening to unreadCommandesCount...");
+    onUnreadCommandesCount((count) => {
+      console.log(`📥 Socket: Compteur mis à jour → ${count}`);
+      setUnreadCount(count);
+      
+      // Mettre à jour localement aussi
+      if (count === 0) {
+        setCommandes(prev => prev.map(c => ({ ...c, isRead: true })));
+      }
+    });
 
     // Écouter les événements en temps réel
     onCommandeCreated((newCommande) => {
-      console.log("✅ Nouvelle commande ajoutée:", newCommande);
+      console.log("✅ Socket: Nouvelle commande ajoutée:", newCommande.id);
       const formatted = {
         ...newCommande,
         table_number: String(newCommande.table_number),
         total_amount: String(newCommande.total_amount),
         items: typeof newCommande.items === 'string' ? newCommande.items : JSON.stringify(newCommande.items),
+        isRead: newCommande.isRead || false
       };
       setCommandes(prev => [formatted, ...prev]);
     });
 
     onCommandeUpdated((updatedCommande) => {
-      console.log("✅ Commande mise à jour:", updatedCommande);
+      console.log("✅ Socket: Commande mise à jour:", updatedCommande.id);
       const formatted = {
         ...updatedCommande,
         table_number: String(updatedCommande.table_number),
         total_amount: String(updatedCommande.total_amount),
         items: typeof updatedCommande.items === 'string' ? updatedCommande.items : JSON.stringify(updatedCommande.items),
+        isRead: updatedCommande.isRead || false
       };
       setCommandes(prev => 
         prev.map(c => c.id === formatted.id ? formatted : c)
@@ -105,15 +147,17 @@ export default function CommandList({ navigation }) {
     });
 
     onCommandeDeleted((data) => {
-      console.log("✅ Commande supprimée:", data.id);
+      console.log("✅ Socket: Commande supprimée:", data.id);
       setCommandes(prev => prev.filter(c => c.id !== data.id));
     });
 
     // Cleanup
     return () => {
+      console.log("🧹 CommandList unmounted, cleaning up...");
       offCommandeCreated();
       offCommandeUpdated();
       offCommandeDeleted();
+      offUnreadCommandesCount();
     };
   }, []);
 
@@ -155,7 +199,7 @@ export default function CommandList({ navigation }) {
           setModalVisible(false);
           setCommandeItem({ 
             id: null, table_number: '', order_name: '', total_amount: '', 
-            payment_method: '', status: '', items: '[]', created_at: '' 
+            payment_method: '', status: '', items: '[]', created_at: '', isRead: false 
           });
           setIsEditing(false);
         } else {
@@ -170,7 +214,7 @@ export default function CommandList({ navigation }) {
           setModalVisible(false);
           setCommandeItem({ 
             id: null, table_number: '', order_name: '', total_amount: '', 
-            payment_method: '', status: '', items: '[]', created_at: '' 
+            payment_method: '', status: '', items: '[]', created_at: '', isRead: false 
           });
           setIsEditing(false);
         } else {
@@ -231,7 +275,14 @@ export default function CommandList({ navigation }) {
     }
 
     return (
-      <View style={styles.card}>
+      <View style={[
+        styles.card, 
+        !item.isRead && styles.unreadCard
+      ]}>
+        {!item.isRead && (
+          <View style={styles.unreadIndicator} />
+        )}
+        
         <View style={styles.cardInfo}>
           <View style={styles.row}>
             <Text style={styles.title} numberOfLines={1}>
@@ -285,8 +336,18 @@ export default function CommandList({ navigation }) {
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back-outline" size={26} color={CARD_BACKGROUND} />
         </TouchableOpacity>
-        <Text style={styles.topBarText}>Gestion des Commandes (Temps Réel)</Text>
+        <Text style={styles.topBarText}>Commandes ({commandes.length})</Text>
       </View>
+
+      {/* ✅ Bannière d'information (disparaît automatiquement après marquage) */}
+      {unreadCount > 0 && (
+        <View style={styles.unreadBanner}>
+          <Ionicons name="notifications-outline" size={20} color={WARNING_COLOR} />
+          <Text style={styles.unreadBannerText}>
+            Marquage automatique de {unreadCount} commande(s)...
+          </Text>
+        </View>
+      )}
 
       {loading && commandes.length === 0 ? (
         <ActivityIndicator size="large" color={PRIMARY_COLOR} style={{ marginTop: 40 }} />
@@ -313,7 +374,7 @@ export default function CommandList({ navigation }) {
           setCommandeItem({
             id: null, table_number: '', order_name: '', total_amount: '',
             payment_method: 'Espèces', status: 'En cours', items: '[]',
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(), isRead: false
           });
           setModalVisible(true);
         }}
@@ -321,6 +382,7 @@ export default function CommandList({ navigation }) {
         <Ionicons name="add-outline" size={30} color={CARD_BACKGROUND} />
       </TouchableOpacity>
 
+      {/* Modal pour ajouter/modifier une commande */}
       <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -434,6 +496,25 @@ const styles = StyleSheet.create({
   },
   topBarText: { color: CARD_BACKGROUND, fontSize: 20, fontWeight: '900' },
   backBtn: { position: "absolute", left: 15, bottom: 15, padding: 5 },
+  unreadBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: WARNING_COLOR + '20',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    marginHorizontal: 15,
+    marginTop: 10,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: WARNING_COLOR,
+  },
+  unreadBannerText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: TEXT_COLOR,
+  },
   flatListContent: { paddingVertical: 10, paddingBottom: 100 },
   emptyList: {
     flex: 1,
@@ -464,6 +545,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 5,
+    position: 'relative',
+  },
+  unreadCard: {
+    borderLeftWidth: 4,
+    borderLeftColor: WARNING_COLOR,
+    backgroundColor: WARNING_COLOR + '05',
+  },
+  unreadIndicator: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#FF3B30',
   },
   cardInfo: { flex: 1, marginRight: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

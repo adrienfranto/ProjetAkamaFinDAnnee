@@ -70,7 +70,7 @@ export default function KiosqueMenu({ route, navigation }) {
 
   const loadMenu = async () => {
     try {
-      const res = await fetch("http://192.168.137.185:3000/api/menu");
+      const res = await fetch("http://192.168.137.214:3000/api/menu");
       const data = await res.json();
       const loadedMenu = data.menu || [];
       setMenu(loadedMenu);
