@@ -12,19 +12,28 @@ dotenv.config();
 export function initializeSocket(server: any): SocketIOServer {
     const io = new SocketIOServer(server, {
         cors: {
-            origin: "*"
-        }
+            origin: "*",
+            methods: ["GET", "POST"]
+        },
+        // ✅ Configuration pour améliorer la stabilité
+        pingTimeout: 60000,
+        pingInterval: 25000,
+        transports: ['websocket', 'polling']
     });
+
+    console.log("🚀 Socket.IO server initialized");
 
     // Auth middleware
     io.use((socket: Socket, next) => {
         const token = socket.handshake.auth.token;
         if (!token) {
+            console.log("❌ Connection attempt without token");
             return next(new Error("Authentification error: no token provided"));
         }
 
         jwt.verify(token, process.env.JWT_SECRET as string, (error: any, decoded: any) => {
             if (error) {
+                console.log("❌ Invalid token:", error.message);
                 return next(new Error("Authentification error: invalid token"));
             }
 
@@ -32,6 +41,7 @@ export function initializeSocket(server: any): SocketIOServer {
             let userData = decoded.user;
             socket.data = userData;
             socket.data.userId = userData.id;
+            console.log(`✅ Token verified for user: ${userData.name} (${userData.id})`);
             next();
         });
     });
@@ -39,10 +49,15 @@ export function initializeSocket(server: any): SocketIOServer {
     // When socket connects, register events
     io.on("connection", async (socket: Socket) => {
         const userId = socket.data.userId;
-        console.log(`✅ User connected ${userId}, username: ${socket.data.name}`);
+        const userName = socket.data.name;
+        console.log(`\n🔌 ============================================`);
+        console.log(`✅ User connected: ${userName} (${userId})`);
+        console.log(`📡 Socket ID: ${socket.id}`);
+        console.log(`🔌 ============================================\n`);
 
         // Join user's personal room for notifications
         socket.join(userId);
+        console.log(`📍 User ${userName} joined room: ${userId}`);
 
         // Mettre à jour le statut en ligne
         try {
@@ -58,21 +73,53 @@ export function initializeSocket(server: any): SocketIOServer {
                 lastSeen: new Date()
             });
 
-            // ✅ NOUVEAU: Envoyer le compteur de commandes non lues dès la connexion
+            console.log(`✅ User ${userName} status updated to online`);
+
+            // ✅ CRITIQUE: Envoyer le compteur de commandes non lues dès la connexion
             const unreadCount = await Commande.countDocuments({ isRead: false });
+            
+            // Envoyer au client spécifique
             socket.emit("unreadCommandesCount", { count: unreadCount });
-            console.log(`📊 Compteur initial envoyé: ${unreadCount} commandes non lues`);
+            console.log(`📊 Initial unread count sent to ${userName}: ${unreadCount} commandes non lues`);
+            
+            // ✅ IMPORTANT: Envoyer aussi à tous les autres clients pour synchronisation
+            socket.broadcast.emit("unreadCommandesCount", { count: unreadCount });
+            console.log(`📊 Broadcast unread count to all other clients: ${unreadCount}`);
 
         } catch (error) {
-            console.log("❌ Error updating online status:", error);
+            console.error(`❌ Error updating online status for ${userName}:`, error);
         }
 
         // Register all events
+        console.log(`📦 Registering events for user ${userName}...`);
         registerUserEvents(io, socket);
         registerCommandeEvents(io, socket);
+        console.log(`✅ Events registered successfully for ${userName}`);
 
-        socket.on("disconnect", async () => {
-            console.log(`❌ User disconnected ${userId}, username: ${socket.data.name}`);
+        // ✅ NOUVEAU: Log toutes les émissions d'événements
+        const originalEmit = socket.emit.bind(socket);
+        socket.emit = function(event: string, ...args: any[]) {
+            if (event !== "ping" && event !== "pong") {
+                console.log(`📤 [${socket.id}] Emitting event: ${event}`, args.length > 0 ? args[0] : '');
+            }
+            return originalEmit(event, ...args);
+        };
+
+        // ✅ NOUVEAU: Log toutes les broadcast
+        const originalBroadcast = socket.broadcast.emit.bind(socket.broadcast);
+        socket.broadcast.emit = function(event: string, ...args: any[]) {
+            if (event !== "ping" && event !== "pong") {
+                console.log(`📡 [BROADCAST from ${socket.id}] Event: ${event}`, args.length > 0 ? args[0] : '');
+            }
+            return originalBroadcast(event, ...args);
+        };
+
+        socket.on("disconnect", async (reason) => {
+            console.log(`\n❌ ============================================`);
+            console.log(`❌ User disconnected: ${userName} (${userId})`);
+            console.log(`📡 Socket ID: ${socket.id}`);
+            console.log(`📝 Reason: ${reason}`);
+            console.log(`❌ ============================================\n`);
             
             // Mettre à jour le statut hors ligne
             try {
@@ -87,11 +134,25 @@ export function initializeSocket(server: any): SocketIOServer {
                     isOnline: false,
                     lastSeen: new Date()
                 });
+
+                console.log(`✅ User ${userName} status updated to offline`);
             } catch (error) {
-                console.log("❌ Error updating offline status:", error);
+                console.error(`❌ Error updating offline status for ${userName}:`, error);
             }
         });
+
+        // ✅ NOUVEAU: Log des erreurs socket
+        socket.on("error", (error) => {
+            console.error(`❌ Socket error for ${userName}:`, error);
+        });
     });
+
+    // ✅ NOUVEAU: Log des événements io globaux
+    io.on("error", (error) => {
+        console.error("❌ Socket.IO server error:", error);
+    });
+
+    console.log("✅ Socket.IO server ready to accept connections");
 
     return io;
 }

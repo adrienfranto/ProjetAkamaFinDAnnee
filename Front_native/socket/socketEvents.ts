@@ -1,14 +1,27 @@
 // socket/socketEvents.js
 import { getSocket } from "./socket";
 
-// ============== Test Socket ==============
-export const testSocket = (payload, callback) => {
+// ============== Fonction utilitaire de vérification ==============
+const checkSocketConnection = (functionName) => {
   const socket = getSocket();
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
+  if (!socket) {
+    console.error(`❌ ${functionName}: Socket not initialized`);
+    return null;
   }
+  
+  if (!socket.connected) {
+    console.error(`❌ ${functionName}: Socket not connected`);
+    return null;
+  }
+  
+  return socket;
+};
+
+// ============== Test Socket ==============
+export const testSocket = (payload, callback) => {
+  const socket = checkSocketConnection("testSocket");
+  if (!socket) return;
 
   if (typeof callback === "function") {
     socket.on("testSocket", callback);
@@ -28,12 +41,8 @@ export const offTestSocket = () => {
 
 // ============== User Events ==============
 export const updateProfile = (data, callback) => {
-  const socket = getSocket();
-  
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
-  }
+  const socket = checkSocketConnection("updateProfile");
+  if (!socket) return;
 
   socket.emit("updateProfile", data);
   
@@ -43,12 +52,8 @@ export const updateProfile = (data, callback) => {
 };
 
 export const onUserStatusChanged = (callback) => {
-  const socket = getSocket();
-  
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
-  }
+  const socket = checkSocketConnection("onUserStatusChanged");
+  if (!socket) return;
 
   socket.on("userStatusChanged", callback);
 };
@@ -61,12 +66,8 @@ export const offUserStatusChanged = () => {
 };
 
 export const getUserStatus = (userId, callback) => {
-  const socket = getSocket();
-  
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
-  }
+  const socket = checkSocketConnection("getUserStatus");
+  if (!socket) return;
 
   socket.emit("getUserStatus", { userId });
   
@@ -79,10 +80,9 @@ export const getUserStatus = (userId, callback) => {
 
 // Créer une commande
 export const createCommande = (data, callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("createCommande");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
     if (callback) callback({ success: false, msg: "Socket non connecté" });
     return;
   }
@@ -93,10 +93,9 @@ export const createCommande = (data, callback) => {
 
 // Mettre à jour une commande
 export const updateCommande = (data, callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("updateCommande");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
     if (callback) callback({ success: false, msg: "Socket non connecté" });
     return;
   }
@@ -107,10 +106,9 @@ export const updateCommande = (data, callback) => {
 
 // Supprimer une commande
 export const deleteCommande = (id, callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("deleteCommande");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
     if (callback) callback({ success: false, msg: "Socket non connecté" });
     return;
   }
@@ -121,10 +119,9 @@ export const deleteCommande = (id, callback) => {
 
 // Récupérer toutes les commandes
 export const getAllCommandes = (callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("getAllCommandes");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
     if (callback) callback({ success: false, msg: "Socket non connecté", data: [] });
     return;
   }
@@ -135,10 +132,9 @@ export const getAllCommandes = (callback) => {
 
 // Récupérer une commande par ID
 export const getCommandeById = (id, callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("getCommandeById");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
     if (callback) callback({ success: false, msg: "Socket non connecté" });
     return;
   }
@@ -149,47 +145,59 @@ export const getCommandeById = (id, callback) => {
 
 // ✅ Récupérer le nombre de commandes non lues
 export const getUnreadCommandesCount = (callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("getUnreadCommandesCount");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
+    console.error("❌ getUnreadCommandesCount: Socket not available");
     if (callback) callback({ success: false, count: 0 });
     return;
   }
 
   console.log("📤 Getting unread commandes count");
-  socket.emit("getUnreadCommandesCount", callback);
+  socket.emit("getUnreadCommandesCount", (response) => {
+    console.log("📥 Unread count response:", response);
+    if (callback) callback(response);
+  });
 };
 
 // ✅ Marquer toutes les commandes comme lues
 export const markAllCommandesAsRead = (callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("markAllCommandesAsRead");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  if (!socket) {
     if (callback) callback({ success: false, msg: "Socket non connecté" });
     return;
   }
 
   console.log("📤 Marking all commandes as read");
-  socket.emit("markAllCommandesAsRead", callback);
+  socket.emit("markAllCommandesAsRead", (response) => {
+    console.log("📥 Mark as read response:", response);
+    if (callback) callback(response);
+  });
 };
 
 // ============== Listeners pour les événements temps réel ==============
 
-// Écouter les nouvelles commandes créées
+// ✅ Écouter les nouvelles commandes créées
 export const onCommandeCreated = (callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("onCommandeCreated");
+  if (!socket) return;
+
+  console.log("👂 Setting up listener for commandeCreated");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
+  // Vérifier si le listener existe déjà
+  const existingListeners = socket.listeners("commandeCreated");
+  if (existingListeners.length > 0) {
+    console.warn("⚠️ Listener for commandeCreated already exists, removing old one");
+    socket.off("commandeCreated");
   }
 
   socket.on("commandeCreated", (data) => {
-    console.log("📥 Nouvelle commande reçue:", data);
+    console.log("📥 [EVENT] commandeCreated received:", data.id);
     callback(data);
   });
+  
+  console.log("✅ Listener for commandeCreated set up successfully");
 };
 
 export const offCommandeCreated = () => {
@@ -200,19 +208,26 @@ export const offCommandeCreated = () => {
   }
 };
 
-// Écouter les mises à jour de commandes
+// ✅ Écouter les mises à jour de commandes
 export const onCommandeUpdated = (callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("onCommandeUpdated");
+  if (!socket) return;
+
+  console.log("👂 Setting up listener for commandeUpdated");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
+  // Vérifier si le listener existe déjà
+  const existingListeners = socket.listeners("commandeUpdated");
+  if (existingListeners.length > 0) {
+    console.warn("⚠️ Listener for commandeUpdated already exists, removing old one");
+    socket.off("commandeUpdated");
   }
 
   socket.on("commandeUpdated", (data) => {
-    console.log("📥 Commande mise à jour:", data);
+    console.log("📥 [EVENT] commandeUpdated received:", data.id);
     callback(data);
   });
+  
+  console.log("✅ Listener for commandeUpdated set up successfully");
 };
 
 export const offCommandeUpdated = () => {
@@ -223,19 +238,26 @@ export const offCommandeUpdated = () => {
   }
 };
 
-// Écouter les suppressions de commandes
+// ✅ Écouter les suppressions de commandes
 export const onCommandeDeleted = (callback) => {
-  const socket = getSocket();
+  const socket = checkSocketConnection("onCommandeDeleted");
+  if (!socket) return;
+
+  console.log("👂 Setting up listener for commandeDeleted");
   
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
-    return;
+  // Vérifier si le listener existe déjà
+  const existingListeners = socket.listeners("commandeDeleted");
+  if (existingListeners.length > 0) {
+    console.warn("⚠️ Listener for commandeDeleted already exists, removing old one");
+    socket.off("commandeDeleted");
   }
 
   socket.on("commandeDeleted", (data) => {
-    console.log("📥 Commande supprimée:", data);
+    console.log("📥 [EVENT] commandeDeleted received:", data.id);
     callback(data);
   });
+  
+  console.log("✅ Listener for commandeDeleted set up successfully");
 };
 
 export const offCommandeDeleted = () => {
@@ -246,25 +268,48 @@ export const offCommandeDeleted = () => {
   }
 };
 
-// ✅ Écouter les changements du compteur de commandes non lues
+// ✅ Écouter les changements du compteur de commandes non lues - CRITIQUE
 export const onUnreadCommandesCount = (callback) => {
-  const socket = getSocket();
-  
-  if (!socket || !socket.connected) {
-    console.log("❌ Socket is not connected");
+  const socket = checkSocketConnection("onUnreadCommandesCount");
+  if (!socket) {
+    console.error("❌ onUnreadCommandesCount: Cannot set up listener - socket not available");
     return;
   }
 
+  console.log("👂 Setting up listener for unreadCommandesCount");
+  
+  // Vérifier si le listener existe déjà
+  const existingListeners = socket.listeners("unreadCommandesCount");
+  console.log(`📊 Existing listeners for unreadCommandesCount: ${existingListeners.length}`);
+  
+  if (existingListeners.length > 0) {
+    console.warn("⚠️ Listener for unreadCommandesCount already exists, removing old one");
+    socket.off("unreadCommandesCount");
+  }
+
   socket.on("unreadCommandesCount", (data) => {
-    console.log("📥 Compteur de commandes non lues:", data.count);
-    callback(data.count);
+    console.log("📥 [EVENT] unreadCommandesCount received:", data);
+    if (data && typeof data.count !== 'undefined') {
+      console.log(`📊 Calling callback with count: ${data.count}`);
+      callback(data.count);
+    } else {
+      console.error("❌ Invalid data format for unreadCommandesCount:", data);
+    }
   });
+  
+  console.log("✅ Listener for unreadCommandesCount set up successfully");
+  
+  // Vérifier immédiatement après configuration
+  const newListeners = socket.listeners("unreadCommandesCount");
+  console.log(`📊 After setup, listeners count: ${newListeners.length}`);
 };
 
 export const offUnreadCommandesCount = () => {
   const socket = getSocket();
   if (socket) {
+    const beforeCount = socket.listeners("unreadCommandesCount").length;
     socket.off("unreadCommandesCount");
-    console.log("🔇 Stopped listening to unreadCommandesCount");
+    const afterCount = socket.listeners("unreadCommandesCount").length;
+    console.log(`🔇 Stopped listening to unreadCommandesCount (removed ${beforeCount - afterCount} listeners)`);
   }
 };

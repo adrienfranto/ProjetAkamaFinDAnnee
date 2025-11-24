@@ -3,15 +3,22 @@ import { Server, Socket } from "socket.io";
 import Commande from "../modals/Commande";
 
 export function registerCommandeEvents(io: Server, socket: Socket) {
-  console.log(`📦 Registering commande events for user ${socket.data.userId}`);
+  const userName = socket.data.name || 'Unknown';
+  const userId = socket.data.userId;
+  console.log(`📦 Registering commande events for user ${userName} (${userId})`);
 
   // Événement: Créer une nouvelle commande
   socket.on("createCommande", async (data, callback) => {
     try {
+      console.log(`\n🆕 ============================================`);
+      console.log(`🆕 CREATE COMMANDE by ${userName}`);
+      console.log(`📝 Data:`, data);
+      
       const { table_number, order_name, total_amount, payment_method, status, items } = data;
 
       // Validation
       if (!table_number || !items || !Array.isArray(items) || items.length === 0) {
+        console.log(`❌ Validation failed for createCommande`);
         return callback({
           success: false,
           msg: "Données invalides: table_number et items requis"
@@ -26,7 +33,7 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         paymentMethod: payment_method || "Inconnu",
         status: status || "En cours",
         items: items,
-        isRead: false, // ✅ NOUVEAU: Par défaut non lue
+        isRead: false, // ✅ Par défaut non lue
       });
 
       await commande.save();
@@ -39,19 +46,25 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
-        isRead: commande.isRead, // ✅ NOUVEAU
+        isRead: commande.isRead,
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       };
 
-      // Émettre à tous les clients connectés
+      console.log(`✅ Commande created: ${commande._id}`);
+
+      // ✅ CRITIQUE: Émettre à TOUS les clients connectés (y compris l'émetteur)
+      console.log(`📡 Broadcasting commandeCreated to ALL clients...`);
       io.emit("commandeCreated", commandeData);
+      console.log(`✅ commandeCreated broadcasted`);
 
-      // ✅ MODIFIÉ: Compter seulement les commandes non lues
+      // ✅ CRITIQUE: Compter et émettre le nombre de commandes non lues
       const unreadCount = await Commande.countDocuments({ isRead: false });
+      console.log(`📊 Current unread count: ${unreadCount}`);
+      console.log(`📡 Broadcasting unreadCommandesCount to ALL clients...`);
       io.emit("unreadCommandesCount", { count: unreadCount });
-
-      console.log(`✅ Commande créée: ${commande._id}`);
+      console.log(`✅ unreadCommandesCount broadcasted: ${unreadCount}`);
+      console.log(`🆕 ============================================\n`);
 
       // Callback pour confirmation
       if (callback) {
@@ -75,11 +88,16 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
   // Événement: Mettre à jour une commande
   socket.on("updateCommande", async (data, callback) => {
     try {
+      console.log(`\n🔄 ============================================`);
+      console.log(`🔄 UPDATE COMMANDE by ${userName}`);
+      console.log(`📝 Data:`, data);
+      
       const { id, table_number, order_name, total_amount, payment_method, status, items } = data;
 
       const commande = await Commande.findById(id);
 
       if (!commande) {
+        console.log(`❌ Commande not found: ${id}`);
         return callback({
           success: false,
           msg: "Commande non trouvée"
@@ -104,19 +122,25 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
-        isRead: commande.isRead, // ✅ NOUVEAU
+        isRead: commande.isRead,
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       };
 
+      console.log(`✅ Commande updated: ${commande._id}`);
+
       // Émettre à tous les clients
+      console.log(`📡 Broadcasting commandeUpdated to ALL clients...`);
       io.emit("commandeUpdated", commandeData);
+      console.log(`✅ commandeUpdated broadcasted`);
 
-      // ✅ MODIFIÉ: Mettre à jour le compteur
+      // Mettre à jour le compteur
       const unreadCount = await Commande.countDocuments({ isRead: false });
+      console.log(`📊 Current unread count: ${unreadCount}`);
+      console.log(`📡 Broadcasting unreadCommandesCount to ALL clients...`);
       io.emit("unreadCommandesCount", { count: unreadCount });
-
-      console.log(`✅ Commande mise à jour: ${commande._id}`);
+      console.log(`✅ unreadCommandesCount broadcasted: ${unreadCount}`);
+      console.log(`🔄 ============================================\n`);
 
       if (callback) {
         callback({
@@ -139,25 +163,36 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
   // Événement: Supprimer une commande
   socket.on("deleteCommande", async (data, callback) => {
     try {
+      console.log(`\n🗑️  ============================================`);
+      console.log(`🗑️  DELETE COMMANDE by ${userName}`);
+      console.log(`📝 ID:`, data.id);
+      
       const { id } = data;
 
       const commande = await Commande.findByIdAndDelete(id);
 
       if (!commande) {
+        console.log(`❌ Commande not found: ${id}`);
         return callback({
           success: false,
           msg: "Commande non trouvée"
         });
       }
 
+      console.log(`✅ Commande deleted: ${id}`);
+
       // Émettre à tous les clients
+      console.log(`📡 Broadcasting commandeDeleted to ALL clients...`);
       io.emit("commandeDeleted", { id: id });
+      console.log(`✅ commandeDeleted broadcasted`);
 
-      // ✅ MODIFIÉ: Mettre à jour le compteur
+      // Mettre à jour le compteur
       const unreadCount = await Commande.countDocuments({ isRead: false });
+      console.log(`📊 Current unread count: ${unreadCount}`);
+      console.log(`📡 Broadcasting unreadCommandesCount to ALL clients...`);
       io.emit("unreadCommandesCount", { count: unreadCount });
-
-      console.log(`✅ Commande supprimée: ${id}`);
+      console.log(`✅ unreadCommandesCount broadcasted: ${unreadCount}`);
+      console.log(`🗑️  ============================================\n`);
 
       if (callback) {
         callback({
@@ -179,6 +214,7 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
   // Événement: Récupérer toutes les commandes
   socket.on("getAllCommandes", async (callback) => {
     try {
+      console.log(`📋 GET ALL COMMANDES by ${userName}`);
       const commandes = await Commande.find().sort({ createdAt: -1 });
 
       const data = commandes.map((c) => ({
@@ -189,10 +225,12 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: c.paymentMethod,
         status: c.status,
         items: c.items,
-        isRead: c.isRead, // ✅ NOUVEAU
+        isRead: c.isRead,
         created_at: c.createdAt.toISOString(),
         updated_at: c.updatedAt.toISOString(),
       }));
+
+      console.log(`✅ Returning ${data.length} commandes`);
 
       if (callback) {
         callback({
@@ -214,10 +252,12 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
   // Événement: Récupérer une commande par ID
   socket.on("getCommandeById", async (data, callback) => {
     try {
+      console.log(`🔍 GET COMMANDE BY ID by ${userName}:`, data.id);
       const { id } = data;
       const commande = await Commande.findById(id);
 
       if (!commande) {
+        console.log(`❌ Commande not found: ${id}`);
         return callback({
           success: false,
           msg: "Commande non trouvée"
@@ -232,10 +272,12 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
         payment_method: commande.paymentMethod,
         status: commande.status,
         items: commande.items,
-        isRead: commande.isRead, // ✅ NOUVEAU
+        isRead: commande.isRead,
         created_at: commande.createdAt.toISOString(),
         updated_at: commande.updatedAt.toISOString(),
       };
+
+      console.log(`✅ Commande found: ${id}`);
 
       if (callback) {
         callback({
@@ -254,10 +296,12 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
     }
   });
 
-  // ✅ NOUVEAU: Événement pour obtenir le nombre de commandes non lues
+  // Événement: Obtenir le nombre de commandes non lues
   socket.on("getUnreadCommandesCount", async (callback) => {
     try {
+      console.log(`📊 GET UNREAD COUNT by ${userName}`);
       const count = await Commande.countDocuments({ isRead: false });
+      console.log(`✅ Current unread count: ${count}`);
       
       if (callback) {
         callback({
@@ -277,18 +321,24 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
     }
   });
 
-  // ✅ NOUVEAU: Marquer toutes les commandes comme lues
+  // Événement: Marquer toutes les commandes comme lues
   socket.on("markAllCommandesAsRead", async (callback) => {
     try {
+      console.log(`\n✅ ============================================`);
+      console.log(`✅ MARK ALL AS READ by ${userName}`);
+      
       const result = await Commande.updateMany(
         { isRead: false },
         { $set: { isRead: true } }
       );
 
-      console.log(`✅ ${result.modifiedCount} commandes marquées comme lues`);
+      console.log(`✅ ${result.modifiedCount} commandes marked as read`);
 
-      // Émettre la mise à jour du compteur à tous les clients
+      // ✅ CRITIQUE: Émettre la mise à jour du compteur à TOUS les clients
+      console.log(`📡 Broadcasting unreadCommandesCount = 0 to ALL clients...`);
       io.emit("unreadCommandesCount", { count: 0 });
+      console.log(`✅ unreadCommandesCount broadcasted: 0`);
+      console.log(`✅ ============================================\n`);
 
       if (callback) {
         callback({
@@ -307,4 +357,6 @@ export function registerCommandeEvents(io: Server, socket: Socket) {
       }
     }
   });
+
+  console.log(`✅ All commande events registered for ${userName}`);
 }

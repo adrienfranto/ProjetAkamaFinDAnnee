@@ -65,7 +65,7 @@ export default function MenuList({ navigation }) {
     console.log("📊 MenuList: Fetching initial unread count...");
     getUnreadCommandesCount((response) => {
       if (response.success) {
-        console.log(`📊 MenuList: Compteur initial: ${response.count}`);
+        console.log(`📊 MenuList: Compteur initial reçu: ${response.count}`);
         setUnreadCount(response.count);
       } else {
         console.log("❌ MenuList: Erreur lors du chargement du compteur");
@@ -75,64 +75,66 @@ export default function MenuList({ navigation }) {
   };
 
   useEffect(() => { 
-    console.log("🔄 MenuList mounted");
+    console.log("🔄 MenuList mounted - Setting up real-time listeners");
     fetchMenu();
+    
+    // ✅ Charger le compteur initial
     fetchUnreadCount();
 
-    // ✅ Écouter les mises à jour du compteur en temps réel
-    console.log("👂 MenuList: Starting to listen to unreadCommandesCount...");
+    // ✅ CRITIQUE: Écouter les mises à jour du compteur en temps réel depuis le serveur
+    console.log("👂 MenuList: Listening to unreadCommandesCount event...");
     onUnreadCommandesCount((count) => {
-      console.log(`📥 MenuList: Compteur mis à jour en temps réel: ${count}`);
+      console.log(`📥 MenuList: REAL-TIME UPDATE - Compteur: ${count}`);
       setUnreadCount(count);
     });
 
-    // ✅ Écouter la création de nouvelles commandes pour incrémenter le badge immédiatement
-    console.log("👂 MenuList: Starting to listen to commandeCreated...");
+    // ✅ Écouter les nouvelles commandes créées
+    console.log("👂 MenuList: Listening to commandeCreated event...");
     onCommandeCreated((newCommande) => {
-      console.log(`📥 MenuList: Nouvelle commande détectée: ${newCommande.id}`);
-      // Le compteur sera mis à jour automatiquement par le serveur via unreadCommandesCount
-      // Mais on peut aussi l'incrémenter localement pour une mise à jour instantanée
+      console.log(`📥 MenuList: Nouvelle commande créée: ${newCommande.id}, isRead: ${newCommande.isRead}`);
+      // Le serveur enverra automatiquement l'événement unreadCommandesCount
+      // Mais on peut aussi mettre à jour localement pour une réponse instantanée
       if (!newCommande.isRead) {
         setUnreadCount(prev => {
           const newCount = prev + 1;
-          console.log(`📊 MenuList: Incrémentation locale du badge: ${prev} → ${newCount}`);
+          console.log(`📊 MenuList: Incrémentation locale: ${prev} → ${newCount}`);
           return newCount;
         });
       }
     });
 
     // ✅ Écouter les mises à jour de commandes
-    console.log("👂 MenuList: Starting to listen to commandeUpdated...");
+    console.log("👂 MenuList: Listening to commandeUpdated event...");
     onCommandeUpdated((updatedCommande) => {
       console.log(`📥 MenuList: Commande mise à jour: ${updatedCommande.id}, isRead: ${updatedCommande.isRead}`);
-      // Le serveur gérera la mise à jour du compteur via unreadCommandesCount
+      // Le serveur gère automatiquement le compteur via unreadCommandesCount
     });
 
     // ✅ Écouter les suppressions de commandes
-    console.log("👂 MenuList: Starting to listen to commandeDeleted...");
+    console.log("👂 MenuList: Listening to commandeDeleted event...");
     onCommandeDeleted((data) => {
       console.log(`📥 MenuList: Commande supprimée: ${data.id}`);
-      // Le serveur gérera la mise à jour du compteur via unreadCommandesCount
+      // Le serveur gère automatiquement le compteur via unreadCommandesCount
     });
 
-    // Cleanup
+    // ✅ Cleanup - TRÈS IMPORTANT
     return () => {
-      console.log("🧹 MenuList unmounted, cleaning up...");
+      console.log("🧹 MenuList unmounted - Cleaning up all listeners");
       offUnreadCommandesCount();
       offCommandeCreated();
       offCommandeUpdated();
       offCommandeDeleted();
     };
-  }, []);
+  }, []); // ⚠️ Dépendances vides pour éviter les réabonnements
 
   // ✅ Recharger le compteur quand on revient sur cette page
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      console.log("🔄 MenuList focused, refreshing unread count...");
+    const unsubscribeFocus = navigation.addListener('focus', () => {
+      console.log("🔄 MenuList focused - Refreshing unread count");
       fetchUnreadCount();
     });
 
-    return unsubscribe;
+    return unsubscribeFocus;
   }, [navigation]);
 
   const updateField = (field, value) => {
@@ -255,19 +257,19 @@ export default function MenuList({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY_COLOR} />
       
       <View style={styles.topBar}>
-        {/* ✅ Badge de notification avec position relative - CORRIGÉ */}
+        {/* ✅ Badge de notification en temps réel */}
         <View style={styles.orderBtnContainer}>
           <TouchableOpacity 
             style={styles.orderBtn} 
             onPress={() => {
-              console.log(`🔔 MenuList: Navigating to listecommande, current unread: ${unreadCount}`);
+              console.log(`🔔 MenuList: Navigation vers listecommande, unread actuel: ${unreadCount}`);
               navigation.navigate("listecommande");
             }}
           >
             <Ionicons name="receipt-outline" size={26} color={CARD_BACKGROUND} />
           </TouchableOpacity>
           
-          {/* ✅ Badge qui se met à jour en temps réel via Socket.IO */}
+          {/* ✅ Badge qui se met à jour automatiquement via Socket.IO */}
           {unreadCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
@@ -405,7 +407,6 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   topBarText: { color: CARD_BACKGROUND, fontSize: 22, fontWeight: "bold" },
-  // ✅ Container pour le bouton avec badge
   orderBtnContainer: { 
     position: "absolute", 
     left: 15, 
@@ -414,7 +415,6 @@ const styles = StyleSheet.create({
   orderBtn: { 
     padding: 8,
   },
-  // ✅ Badge positionné par rapport au container - SE MET À JOUR EN TEMPS RÉEL
   badge: {
     position: 'absolute',
     top: -5,
