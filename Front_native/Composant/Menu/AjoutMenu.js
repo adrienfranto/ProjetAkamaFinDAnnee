@@ -10,7 +10,13 @@ import axios from 'axios';
 import { 
   getUnreadCommandesCount, 
   onUnreadCommandesCount, 
-  offUnreadCommandesCount 
+  offUnreadCommandesCount,
+  onCommandeCreated,
+  onCommandeUpdated,
+  onCommandeDeleted,
+  offCommandeCreated,
+  offCommandeUpdated,
+  offCommandeDeleted
 } from '../../socket/socketEvents';
 
 const BACKEND_URL = 'http://192.168.137.214:3000/api/menu';
@@ -56,13 +62,13 @@ export default function MenuList({ navigation }) {
 
   // ✅ Charger le compteur de notifications initial
   const fetchUnreadCount = () => {
-    console.log("📊 Fetching initial unread count...");
+    console.log("📊 MenuList: Fetching initial unread count...");
     getUnreadCommandesCount((response) => {
       if (response.success) {
-        console.log(`📊 Compteur initial: ${response.count}`);
+        console.log(`📊 MenuList: Compteur initial: ${response.count}`);
         setUnreadCount(response.count);
       } else {
-        console.log("❌ Erreur lors du chargement du compteur");
+        console.log("❌ MenuList: Erreur lors du chargement du compteur");
         setUnreadCount(0);
       }
     });
@@ -74,16 +80,48 @@ export default function MenuList({ navigation }) {
     fetchUnreadCount();
 
     // ✅ Écouter les mises à jour du compteur en temps réel
-    console.log("👂 Starting to listen to unreadCommandesCount...");
+    console.log("👂 MenuList: Starting to listen to unreadCommandesCount...");
     onUnreadCommandesCount((count) => {
-      console.log(`📥 Compteur mis à jour en temps réel: ${count}`);
+      console.log(`📥 MenuList: Compteur mis à jour en temps réel: ${count}`);
       setUnreadCount(count);
+    });
+
+    // ✅ Écouter la création de nouvelles commandes pour incrémenter le badge immédiatement
+    console.log("👂 MenuList: Starting to listen to commandeCreated...");
+    onCommandeCreated((newCommande) => {
+      console.log(`📥 MenuList: Nouvelle commande détectée: ${newCommande.id}`);
+      // Le compteur sera mis à jour automatiquement par le serveur via unreadCommandesCount
+      // Mais on peut aussi l'incrémenter localement pour une mise à jour instantanée
+      if (!newCommande.isRead) {
+        setUnreadCount(prev => {
+          const newCount = prev + 1;
+          console.log(`📊 MenuList: Incrémentation locale du badge: ${prev} → ${newCount}`);
+          return newCount;
+        });
+      }
+    });
+
+    // ✅ Écouter les mises à jour de commandes
+    console.log("👂 MenuList: Starting to listen to commandeUpdated...");
+    onCommandeUpdated((updatedCommande) => {
+      console.log(`📥 MenuList: Commande mise à jour: ${updatedCommande.id}, isRead: ${updatedCommande.isRead}`);
+      // Le serveur gérera la mise à jour du compteur via unreadCommandesCount
+    });
+
+    // ✅ Écouter les suppressions de commandes
+    console.log("👂 MenuList: Starting to listen to commandeDeleted...");
+    onCommandeDeleted((data) => {
+      console.log(`📥 MenuList: Commande supprimée: ${data.id}`);
+      // Le serveur gérera la mise à jour du compteur via unreadCommandesCount
     });
 
     // Cleanup
     return () => {
       console.log("🧹 MenuList unmounted, cleaning up...");
       offUnreadCommandesCount();
+      offCommandeCreated();
+      offCommandeUpdated();
+      offCommandeDeleted();
     };
   }, []);
 
@@ -217,22 +255,23 @@ export default function MenuList({ navigation }) {
       <StatusBar barStyle="light-content" backgroundColor={PRIMARY_COLOR} />
       
       <View style={styles.topBar}>
-        {/* ✅ Badge de notification avec position relative */}
+        {/* ✅ Badge de notification avec position relative - CORRIGÉ */}
         <View style={styles.orderBtnContainer}>
           <TouchableOpacity 
             style={styles.orderBtn} 
             onPress={() => {
-              console.log(`🔔 Navigating to listecommande, current unread: ${unreadCount}`);
+              console.log(`🔔 MenuList: Navigating to listecommande, current unread: ${unreadCount}`);
               navigation.navigate("listecommande");
             }}
           >
             <Ionicons name="receipt-outline" size={26} color={CARD_BACKGROUND} />
           </TouchableOpacity>
           
+          {/* ✅ Badge qui se met à jour en temps réel via Socket.IO */}
           {unreadCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {unreadCount > 99 ? '99+' : unreadCount }
+                {unreadCount > 99 ? '99+' : unreadCount}
               </Text>
             </View>
           )}
@@ -375,7 +414,7 @@ const styles = StyleSheet.create({
   orderBtn: { 
     padding: 8,
   },
-  // ✅ Badge positionné par rapport au container
+  // ✅ Badge positionné par rapport au container - SE MET À JOUR EN TEMPS RÉEL
   badge: {
     position: 'absolute',
     top: -5,

@@ -48,6 +48,10 @@ export default function CommandList({ navigation }) {
   });
   const [isEditing, setIsEditing] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showUnreadBanner, setShowUnreadBanner] = useState(false);
+  
+  // ✅ Ref pour le timer de marquage automatique
+  const autoMarkTimerRef = useRef(null);
 
   const formatDate = (dateString) => {
     if (!dateString) return "Non défini";
@@ -82,18 +86,32 @@ export default function CommandList({ navigation }) {
         setUnreadCount(unread);
         console.log(`📊 Commandes chargées: ${formattedCommandes.length}, Non lues: ${unread}`);
         
-        // ✅ MARQUAGE AUTOMATIQUE : Si on a des commandes non lues, les marquer immédiatement
+        // ✅ NOUVEAU: Afficher la bannière et déclencher le marquage après 5 secondes
         if (unread > 0) {
-          console.log(`🔔 Marquage automatique de ${unread} commande(s)...`);
-          setTimeout(() => {
+          setShowUnreadBanner(true);
+          console.log(`⏱️ Timer de 5 secondes démarré pour ${unread} commande(s)...`);
+          
+          // Nettoyer le timer précédent s'il existe
+          if (autoMarkTimerRef.current) {
+            clearTimeout(autoMarkTimerRef.current);
+          }
+          
+          // Démarrer le nouveau timer
+          autoMarkTimerRef.current = setTimeout(() => {
+            console.log(`🔔 5 secondes écoulées, marquage de ${unread} commande(s)...`);
             markAllCommandesAsRead((markResponse) => {
               if (markResponse.success) {
                 console.log(`✅ ${markResponse.msg}`);
+                setShowUnreadBanner(false);
+                
+                // Mettre à jour l'état local immédiatement
+                setCommandes(prev => prev.map(c => ({ ...c, isRead: true })));
+                setUnreadCount(0);
               } else {
                 console.error("❌ Erreur marquage:", markResponse.msg);
               }
             });
-          }, 500); // Petit délai pour que l'utilisateur voie la page
+          }, 5000); // 5 secondes
         }
       } else {
         Alert.alert("Erreur", response.msg || "Impossible de charger les commandes");
@@ -116,6 +134,7 @@ export default function CommandList({ navigation }) {
       // Mettre à jour localement aussi
       if (count === 0) {
         setCommandes(prev => prev.map(c => ({ ...c, isRead: true })));
+        setShowUnreadBanner(false);
       }
     });
 
@@ -154,6 +173,13 @@ export default function CommandList({ navigation }) {
     // Cleanup
     return () => {
       console.log("🧹 CommandList unmounted, cleaning up...");
+      
+      // Nettoyer le timer
+      if (autoMarkTimerRef.current) {
+        clearTimeout(autoMarkTimerRef.current);
+        autoMarkTimerRef.current = null;
+      }
+      
       offCommandeCreated();
       offCommandeUpdated();
       offCommandeDeleted();
@@ -339,12 +365,12 @@ export default function CommandList({ navigation }) {
         <Text style={styles.topBarText}>Commandes ({commandes.length})</Text>
       </View>
 
-      {/* ✅ Bannière d'information (disparaît automatiquement après marquage) */}
-      {unreadCount > 0 && (
+      {/* ✅ Bannière d'information avec compte à rebours */}
+      {showUnreadBanner && unreadCount > 0 && (
         <View style={styles.unreadBanner}>
-          <Ionicons name="notifications-outline" size={20} color={WARNING_COLOR} />
+          <Ionicons name="time-outline" size={20} color={WARNING_COLOR} />
           <Text style={styles.unreadBannerText}>
-            Marquage automatique de {unreadCount} commande(s)...
+            Marquage de {unreadCount} commande(s) dans 5s...
           </Text>
         </View>
       )}
@@ -501,7 +527,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: WARNING_COLOR + '20',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 15,
     marginHorizontal: 15,
     marginTop: 10,
